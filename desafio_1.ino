@@ -10,27 +10,12 @@ Adafruit_LiquidCrystal lcd(0);
 int *valores = nullptr; // Puntero para el arreglo dinámico
 int capacidad = 10; // Capacidad inicial del arreglo
 int tamano = 0; // Tamaño actual (Cantidad de elementos)
-const int capacidadMaxima = 50; // Capacidad máxima fija del arreglo
+const int capacidadMaxima = 100; // Capacidad máxima fija del arreglo
 int val = 0; // Variable para la lectura analógica
 bool tomandoDatos = false;
 unsigned long tiempoInicio = 0;
 unsigned long tiempoFin = 0;
-
-// Función para redimensionar el arreglo dinámico
-void redimensionarArreglo() {
-  if (capacidad < capacidadMaxima) {
-    int nuevaCapacidad = (capacidad * 2 > capacidadMaxima) ? capacidadMaxima : capacidad * 2;
-    int *nuevoArreglo = new int[nuevaCapacidad]; // Crear nuevo arreglo con más capacidad
-
-    for (int i = 0; i < tamano; i++) {
-      nuevoArreglo[i] = valores[i]; // Copia los elementos del arreglo viejo al nuevo
-    }
-
-    delete[] valores; // Libera la memoria del arreglo viejo
-    valores = nuevoArreglo; // Asigna el nuevo arreglo
-    capacidad = nuevaCapacidad; // Actualiza la capacidad
-  }
-}
+int indiceInicio = 0; // Índice del primer elemento del arreglo (para el ciclo circular)
 
 void liberarMemoria() {
   if (valores != nullptr) {
@@ -46,7 +31,7 @@ void calcularParametros(int *valores, int tamano, float &frecuencia, float &peri
   periodo = 0;
   amplitud = 0;
 
-  // Encontrar el máximo y el mínimo
+  // Encontrar el máximo y el mínimo global
   int maxVal = valores[0];
   int minVal = valores[0];
 
@@ -61,25 +46,38 @@ void calcularParametros(int *valores, int tamano, float &frecuencia, float &peri
   // Contar picos y valles
   int numPicos = 0;
   int numValles = 0;
+  bool enPico = false;
+  bool enValle = false;
+
   for (int i = 1; i < tamano - 1; i++) {
-    if (valores[i] > valores[i - 1] && valores[i] > valores[i + 1]) {
+    if (valores[i] > valores[i - 1] && valores[i] > valores[i + 1] && !enPico) {
       numPicos++;
-    } else if (valores[i] < valores[i - 1] && valores[i] < valores[i + 1]) {
+      enPico = true;
+      enValle = false;
+    } else if (valores[i] < valores[i - 1] && valores[i] < valores[i + 1] && !enValle) {
       numValles++;
+      enValle = true;
+      enPico = false;
+    } else {
+      if (valores[i] != valores[i - 1]) {
+        enPico = false;
+        enValle = false;
+      }
     }
   }
 
   // Determinar el período
   if (numPicos > 0) {
-    // Suponemos que el número de picos y valles son similares
     periodo = (float)tamano / (numPicos + numValles); // Estimación del período
-    frecuencia = 1000.0 / periodo; // Frecuencia en Hz (suponiendo que `millis()` usa ms)
+    frecuencia = 1.0 / periodo; // Frecuencia en Hz
   }
 }
 
 // Función para detectar el tipo de onda
 String detectarTipoDeOnda(int *valores, int tamano) {
-  if (tamano < 5) return "Indefinida"; // Necesita suficientes datos para análisis
+  if (tamano < 5) {
+    return "Indefinida";
+  }
 
   int numPicos = 0;
   int numValles = 0;
@@ -92,12 +90,10 @@ String detectarTipoDeOnda(int *valores, int tamano) {
     }
   }
 
-  // Detectar si tiene aproximadamente el mismo número de picos y valles
   if (abs(numPicos - numValles) > 1) {
     return "Indefinida";
   }
 
-  // Chequeo adicional para onda senoidal
   int numCiclos = 0;
   bool enCiclo = false;
 
@@ -116,11 +112,9 @@ String detectarTipoDeOnda(int *valores, int tamano) {
     return "Indefinida";
   }
 
-  // Determinación de tipo de onda
   if (numPicos >= numValles * 1.5) {
     return "Cuadrada";
   } else if (numPicos > 0 && numValles > 0) {
-    // Chequear amplitud para triangular
     int maxAltura = numPicos - numValles;
     if (maxAltura > 1.5 * numValles) {
       return "Triangular";
@@ -128,10 +122,11 @@ String detectarTipoDeOnda(int *valores, int tamano) {
       return "Senoidal";
     }
   } else {
-    return "Triangular"; // Si no se identifica claramente como senoidal o cuadrada, lo tratamos como triangular
+    return "Triangular";
   }
 }
 
+// Función setup
 void setup() {
   pinMode(pinBotonIniciar, INPUT);
   pinMode(pinBotonDetener, INPUT);
@@ -141,12 +136,14 @@ void setup() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Encendido :)");
-  valores = new int[capacidad]; // Inicializa el arreglo dinámico con la capacidad inicial
+  valores = new int[capacidadMaxima]; // Inicializa el arreglo dinámico con capacidad máxima
 }
 
+// Función loop
 void loop() {
   int estadoBotonIniciar = digitalRead(pinBotonIniciar);
   int estadoBotonDetener = digitalRead(pinBotonDetener);
+  val = analogRead(analogPin);
 
   // Iniciar toma de datos
   if (estadoBotonIniciar == HIGH && !tomandoDatos) {
@@ -163,12 +160,14 @@ void loop() {
   // Captura de datos y análisis
   if (tomandoDatos) {
     val = analogRead(analogPin); // Lectura pin analógico
-
-    if (tamano < capacidadMaxima) {
-      if (tamano >= capacidad) {
-        redimensionarArreglo(); // Redimensiona si el arreglo está lleno
-      }
-      valores[tamano] = val; // Guarda en el arreglo
+    
+    // Si el arreglo está lleno, reemplaza el valor más antiguo (circular)
+    if (tamano >= capacidadMaxima) {
+      valores[indiceInicio] = val; // Reemplaza el valor en la posición de inicio
+      indiceInicio = (indiceInicio + 1) % capacidadMaxima;
+    } else {
+      // Si el arreglo no está lleno, agrega el nuevo valor
+      valores[tamano] = val;
       tamano++;
     }
 
@@ -196,11 +195,21 @@ void loop() {
       lcd.print(" ms");
       delay(2000); // Mostrar duración en la LCD durante 2 segundos
 
-      // Imprimir el arreglo
+      // Imprimir el contenido del arreglo
       Serial.println("Contenido del arreglo de valores:");
-      for (int i = 0; i < tamano; ++i) {
-        Serial.print(valores[i]);
-        Serial.print(" , ");
+
+      // Si el arreglo se llenó completamente, mostramos desde el índice de inicio
+      if (tamano >= capacidadMaxima) {
+        for (int i = 0; i < capacidadMaxima; ++i) {
+          int indice = (indiceInicio + i) % capacidadMaxima; // Índice circular
+          Serial.print(valores[indice]);
+          Serial.print(" , ");
+        }
+      } else {
+        for (int i = 0; i < tamano; ++i) {
+          Serial.print(valores[i]);
+          Serial.print(" , ");
+        }
       }
       Serial.println(); // Línea en blanco para separación
 
