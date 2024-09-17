@@ -3,7 +3,7 @@
 // Definición de pines
 const int pinBotonIniciar = 2;
 const int pinBotonDetener = 4;
-int analogPin = 0;
+const int analogPin = A0; // Cambié para usar una constante de pin analógico
 Adafruit_LiquidCrystal lcd(0);
 
 // Variables Globales
@@ -11,83 +11,136 @@ int *valores = nullptr; // Puntero para el arreglo dinámico
 int capacidad = 100; // Capacidad del arreglo (últimos 100)
 int tamano = 0; // Tamaño actual (Cantidad de elementos)
 int val = 0; // Variable para la lectura analógica
-int val2 = 0;
 bool tomandoDatos = false;
 unsigned long tiempoInicio = 0;
 unsigned long tiempoFin = 0;
 int indiceInicio = 0; // Índice del primer elemento del arreglo
 
-const int capacidadMaxima = 100; // Capacidad máxima fija del arreglo
 
-void liberarMemoria() {
-  if (valores != nullptr) {
+//Funcion para liberar la memoria 
+void liberarMemoria() 
+{
+  if (valores != nullptr) 
+  {
     delete[] valores;
     valores = nullptr;
   }
 }
 
 // Función para calcular la frecuencia, período y amplitud
-void calcularParametros(int *valores, int tamano, float &frecuencia, float &periodo, float &amplitud) {
-  // Inicializar valores
+void calcularParametros(int *valores, int tamano, float &frecuencia, float &periodo, float &amplitud) 
+{
   frecuencia = 0;
   periodo = 0;
   amplitud = 0;
+  
+  //Para calcular el periodo en ms 
+  unsigned long tiempoPrimerCambio = 0;
+  unsigned long tiempoTercerCambio = 0;
 
-  // Encontrar el máximo y el mínimo global
+  //Se inicializa en la posicion 0 del arreglo
   int maxVal = valores[0];
   int minVal = valores[0];
-
-  for (int i = 1; i < tamano; i++) {
-    if (valores[i] > maxVal) maxVal = valores[i];
-    if (valores[i] < minVal) minVal = valores[i];
-  }
-
-  // Amplitud
+  
+  //Ira recorriendo uno a uno los elemtos del arreglo
+  for (int i = 1; i < tamano; i++) 
+  {
+    // Actualiza el valor máximo si el valor actual es mayor
+    if (valores[i] > maxVal) 
+    {
+        maxVal = valores[i];
+    }
+    // Actualiza el valor mínimo si el valor actual es menor
+    if (valores[i] < minVal) 
+    {
+        minVal = valores[i];
+    }
+}
+  //La amplitud se resta, porque uno de los valores es negativo
+  //En realidad estariamos sumando
   amplitud = (maxVal - minVal) / 2.0;
 
-  // Cálculo del período basado en cambios de signo
   int primerCambio = -1;
   int tercerCambio = -1;
   int numCambios = 0;
 
-  for (int i = 1; i < tamano; i++) {
-    if ((valores[i - 1] >= 0 && valores[i] < 0) || (valores[i - 1] < 0 && valores[i] >= 0)) {
+  for (int i = 1; i < tamano; i++) 
+  {
+    //valores[i - 1] >= 0: Verifica si el valor en la posición anterior (i - 1) es mayor o igual a 0
+    //valores[i] < 0: Verifica si el valor en la posición actual (i) es menor que 0, negativo
+    //Ahi se puede ver el cambio de positivo a negativo
+    //Una condicion es para saber si cambia de positivo a negativo 
+    //La segunda condicion es para saber si hay un cambio de negativo a positivo
+    if ((valores[i - 1] >= 0 && valores[i] < 0) || (valores[i - 1] < 0 && valores[i] >= 0)) 
+    {
       numCambios++;
-      if (numCambios == 1) {
-        primerCambio = i;
-      } else if (numCambios == 3) {
-        tercerCambio = i;
+      if (numCambios == 1) 
+      {
+        primerCambio = i;//en el valor i donde ocurre el primer cambio
+        tiempoPrimerCambio = millis();  // Captura el tiempo del primer cambio
+      } 
+      else if (numCambios == 3) 
+      {
+        tercerCambio = i;//en el valor i donde ocurre el tercer cambio
+        tiempoTercerCambio = millis();  // Captura el tiempo del primer cambio
         break;
       }
+    //las i, de los cambios, se toman como valores en entero
     }
   }
 
-  if (primerCambio != -1 && tercerCambio != -1) {
-    periodo = (float)(tercerCambio - primerCambio);
-    frecuencia = 1000.0 / periodo; // Asumiendo 1000 muestras por segundo
+  if (primerCambio != -1 && tercerCambio != -1) 
+  {
+    unsigned long tiempoPeriodo = tiempoTercerCambio - tiempoPrimerCambio;
+    periodo = (float)tiempoPeriodo;  // El período en milisegundos
+    frecuencia = 1000.0 / periodo;
   }
 }
 
 // Función para detectar el tipo de onda
-String detectarTipoDeOnda(int *valores, int tamano) {
-  if (tamano < 5) return "Indefinida"; // Necesita suficientes datos para análisis
+String detectarTipoDeOnda(int *valores, int tamano) 
+{
+  if (tamano < 5) 
+  {
+    return "Indefinida";
+  }
+
 
   int numPicos = 0;
   int numValles = 0;
 
-  for (int i = 1; i < tamano - 1; i++) {
-    if (valores[i] > valores[i - 1] && valores[i] > valores[i + 1]) numPicos++;
-    else if (valores[i] < valores[i - 1] && valores[i] < valores[i + 1]) numValles++;
+  for (int i = 1; i < tamano - 1; i++) 
+  {
+    if (valores[i] > valores[i - 1] && valores[i] > valores[i + 1]) 
+    {
+        numPicos++;
+    } 
+    else if (valores[i] < valores[i - 1] && valores[i] < valores[i + 1]) 
+    {
+        numValles++;
+    }
   }
 
-  if (abs(numPicos - numValles) > 1) return "Indefinida";
-
-  if (numPicos >= numValles * 1.5) return "Cuadrada";
-  else if (numPicos > 0 && numValles > 0) return "Senoidal";
-  else return "Triangular";
+  if (numPicos > 2 * numValles || numValles > 2 * numPicos)
+  {
+    return "Indefinida";
+  }
+  if (numPicos >= numValles * 1.5)
+  {
+    return "Cuadrada";
+  }
+  else if (numPicos > 0 && numValles > 0)
+  {
+    return "Senoidal";
+  }
+  else
+  {
+    return "Triangular";
+  }
 }
 
-void setup() {
+void setup() 
+{
   pinMode(pinBotonIniciar, INPUT);
   pinMode(pinBotonDetener, INPUT);
   Serial.begin(9600);
@@ -96,21 +149,24 @@ void setup() {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print("Encendido :)");
-  valores = new int[capacidad]; // Inicializa el arreglo dinámico con la capacidad inicial
+  valores = new int[capacidad];
 }
 
-void loop() {
+void loop() 
+{
   int estadoBotonIniciar = digitalRead(pinBotonIniciar);
   int estadoBotonDetener = digitalRead(pinBotonDetener);
-  val2 = analogRead(analogPin);
-  
-  // Imprimir el valor de la señal en el monitor serial (visualización antes, durante y después)
-  Serial.println(val2);
+  val = analogRead(analogPin);
+
+  // Imprimir el valor de la señal en el monitor serial
+  Serial.println(val);
 
   // Iniciar toma de datos
-  if (estadoBotonIniciar == HIGH && !tomandoDatos) {
+  if (estadoBotonIniciar == HIGH && !tomandoDatos) 
+  {
     delay(10); // Anti-rebote
-    if (digitalRead(pinBotonIniciar) == HIGH) {
+    if (digitalRead(pinBotonIniciar) == HIGH) 
+    {
       tomandoDatos = true;
       tiempoInicio = millis();
       Serial.println("Iniciando toma de datos...");
@@ -120,26 +176,30 @@ void loop() {
   }
 
   // Captura de datos y análisis
-  if (tomandoDatos) {
-    val = analogRead(analogPin); // Lectura pin analógico
-    
-    // Si el arreglo está lleno, reemplaza el valor más antiguo (circular)
-    if (tamano >= capacidad) {
-      valores[indiceInicio] = val; // Reemplaza el valor en la posición de inicio
+  if (tomandoDatos) 
+  {
+    val = analogRead(analogPin);
+
+    if (tamano >= capacidad) 
+    {
+      valores[indiceInicio] = val;
       indiceInicio = (indiceInicio + 1) % capacidad;
-    } else {
+    } 
+    else 
+    {
       valores[tamano] = val;
       tamano++;
     }
 
-    // Imprimir el valor en el monitor serial durante la toma de datos
     Serial.println(val); // Imprimir cada valor leído
   }
 
   // Detener toma de datos
-  if (estadoBotonDetener == HIGH && tomandoDatos) {
+  if (estadoBotonDetener == HIGH && tomandoDatos) 
+  {
     delay(10); // Anti-rebote
-    if (digitalRead(pinBotonDetener) == HIGH) {
+    if (digitalRead(pinBotonDetener) == HIGH) 
+    {
       tomandoDatos = false;
       tiempoFin = millis();
       unsigned long duracionToma = tiempoFin - tiempoInicio;
@@ -151,20 +211,19 @@ void loop() {
 
       lcd.clear();
       lcd.setCursor(0, 0);
-      lcd.print("Duracion de tiempo de toda la onda: ");
+      lcd.print("Duracion: ");
       lcd.print(duracionToma);
       lcd.print(" ms");
       delay(2000);
 
-      // Imprimir el arreglo en el monitor serial
       Serial.println("Contenido del arreglo de valores de la onda:");
-      for (int i = 0; i < tamano; ++i) {
+      for (int i = 0; i < tamano; ++i) 
+      {
         Serial.print(valores[(indiceInicio + i) % capacidad]);
         Serial.print(" , ");
       }
       Serial.println();
 
-      // Detectar el tipo de onda
       String tipoDeOnda = detectarTipoDeOnda(valores, tamano);
       Serial.print("Tipo de onda detectada: ");
       Serial.println(tipoDeOnda);
@@ -172,11 +231,11 @@ void loop() {
       lcd.setCursor(0, 0);
       lcd.print("Onda: ");
       lcd.print(tipoDeOnda);
-      delay(200);
+      delay(2000);
 
-      // Calcular parámetros
       float frecuencia, periodo, amplitud;
-      if (tipoDeOnda != "Indefinida") {
+      if (tipoDeOnda != "Indefinida") 
+      {
         calcularParametros(valores, tamano, frecuencia, periodo, amplitud);
 
         Serial.println();
@@ -190,7 +249,8 @@ void loop() {
         Serial.print(amplitud);
         Serial.println(" unidades");
 
-        lcd.setCursor(0, 1);
+        lcd.clear();
+        lcd.setCursor(0, 0);
         lcd.print("Frecuencia: ");
         lcd.print(frecuencia);
         lcd.print(" Hz");
@@ -203,12 +263,16 @@ void loop() {
         delay(2000);
         lcd.clear();
         lcd.setCursor(0, 0);
-        lcd.print("Aamplitud: ");
+        lcd.print("Amplitud: ");
         lcd.print(amplitud);
-        lcd.print(" unidades voltaje");
+        lcd.print(" unidades");
         delay(2000);
-      } else {
+      } 
+      else 
+      {
         Serial.println("Una onda indefinida no tiene periodo, amplitud o frecuencia.");
+        Serial.println("Una onda indefinida no tiene periodo, amplitud o frecuencia.");
+        delay(5000);
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Onda: Indefinida");
