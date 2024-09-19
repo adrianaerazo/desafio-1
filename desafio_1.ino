@@ -8,7 +8,7 @@ Adafruit_LiquidCrystal lcd(0);
 
 // Variables Globales
 int *valores = nullptr; // Puntero para el arreglo dinámico
-int capacidad = 100; // Capacidad del arreglo (últimos 100)
+int capacidad = 400; // Capacidad del arreglo (últimos 100)
 int tamano = 0; // Tamaño actual (Cantidad de elementos)
 int val = 0; // Variable para la lectura analógica
 bool tomandoDatos = false;
@@ -125,7 +125,7 @@ String detectarTipoDeOnda(int *valores, int tamano)
     // Detectar valles (valores mínimos)
     else if (valores[i] < valores[i - 1] && valores[i] < valores[i + 1]) 
     {
-      numValles++;
+      numValles++; //Contando valles
       if (i > 1 && valores[i] == valores[i - 1] && valores[i] == valores[i - 2])
       {
         hayMinimosSeguidos = true;
