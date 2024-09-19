@@ -3,7 +3,7 @@
 // Definición de pines
 const int pinBotonIniciar = 2;
 const int pinBotonDetener = 4;
-const int analogPin = A0; // Cambié para usar una constante de pin analógico
+const int analogPin = A0;
 Adafruit_LiquidCrystal lcd(0);
 
 // Variables Globales
@@ -105,39 +105,49 @@ String detectarTipoDeOnda(int *valores, int tamano)
     return "Indefinida";
   }
 
-
   int numPicos = 0;
   int numValles = 0;
+  bool hayMaximosSeguidos = false;
+  bool hayMinimosSeguidos = false;
 
+  // Verificar valores máximos y mínimos seguidos
   for (int i = 1; i < tamano - 1; i++) 
   {
+    // Detectar picos (valores máximos)
     if (valores[i] > valores[i - 1] && valores[i] > valores[i + 1]) 
     {
-        numPicos++;
+      numPicos++;
+      if (i > 1 && valores[i] == valores[i - 1] && valores[i] == valores[i - 2])
+      {
+        hayMaximosSeguidos = true;
+      }
     } 
+    // Detectar valles (valores mínimos)
     else if (valores[i] < valores[i - 1] && valores[i] < valores[i + 1]) 
     {
-        numValles++;
+      numValles++;
+      if (i > 1 && valores[i] == valores[i - 1] && valores[i] == valores[i - 2])
+      {
+        hayMinimosSeguidos = true;
+      }
     }
   }
 
-  if (numPicos > 2 * numValles || numValles > 2 * numPicos)
-  {
-    return "Indefinida";
-  }
-  if (numPicos >= numValles * 1.5)
+  // Determinar el tipo de onda
+  if (hayMaximosSeguidos && hayMinimosSeguidos) 
   {
     return "Cuadrada";
   }
-  else if (numPicos > 0 && numValles > 0)
+  else if (numPicos > 0 && numValles > 0) 
   {
     return "Senoidal";
   }
-  else
+  else 
   {
     return "Triangular";
   }
 }
+
 
 void setup() 
 {
@@ -271,7 +281,7 @@ void loop()
       else 
       {
         Serial.println("Una onda indefinida no tiene periodo, amplitud o frecuencia.");
-        Serial.println("Una onda indefinida no tiene periodo, amplitud o frecuencia.");
+        lcd.println("Una onda indefinida no tiene periodo, amplitud o frecuencia.");
         delay(5000);
         lcd.clear();
         lcd.setCursor(0, 0);
@@ -283,4 +293,5 @@ void loop()
     }
   }
 }
+
 
